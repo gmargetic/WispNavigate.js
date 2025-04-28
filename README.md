@@ -3,7 +3,8 @@
 
 **WispNavigate.js** is a super lightweight JavaScript class for simple AJAX-based navigation using `<a>` tags with `wisp:navigate` or `wisp-navigate` attributes.  
 Perfect for adding SPA-like behavior without heavy frameworks.
-This is lite version of [//github.com/gmargetic/wisp.js](Wisp.js)
+
+This is super lite version of the [gmargetic/Wisp.js](https://github.com/gmargetic/Wisp.js)
 
 ---
 
