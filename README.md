@@ -21,6 +21,7 @@ Simply include WispNavigate.js via [jsDelivr](https://www.jsdelivr.com/):
 
 ```html
 <script src="https://cdn.jsdelivr.net/gh/gmargetic/wispnavigate.js/wisp-navigate.min.js"></script>
+```
 
 ### Include the script in your project:
 
