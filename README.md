@@ -2,7 +2,10 @@
 # WispNavigate.js
 
 **WispNavigate.js** is a super lightweight JavaScript class for simple AJAX-based navigation using `<a>` tags with `wisp:navigate` or `wisp-navigate` attributes.  
+
 Perfect for adding SPA-like behavior without heavy frameworks.
+
+Convert your classic website to SPA-like beauty in a no time.
 
 This is super lite version of the [gmargetic/Wisp.js](https://github.com/gmargetic/Wisp.js)
 
@@ -29,13 +32,12 @@ Simply include WispNavigate.js via [jsDelivr](https://www.jsdelivr.com/):
 <script src="WispNavigate.js"></script>
 ```
 
-~
-### NPM
+### ~NPM~
 
-`npm install wisp-navigate`
+~npm install wisp-navigate~
 
 (NPM package is not yet available.)
-~
+
 
 ### Or import it via your bundler.
 
