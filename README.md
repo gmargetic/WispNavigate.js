@@ -3,7 +3,7 @@
 
 **WispNavigate.js** is a super lightweight JavaScript class for simple AJAX-based navigation using `<a>` tags with `wisp:navigate` or `wisp-navigate` attributes.  
 Perfect for adding SPA-like behavior without heavy frameworks.
-This is lite version of [https://github.com/gmargetic/Wisp.js](gmargetic/Wisp.js)
+This is lite version of [//github.com/gmargetic/wisp.js](Wisp.js)
 
 ---
 
@@ -14,13 +14,28 @@ This project is still under active development. Expect bugs, unfinished features
 
 ## Installation
 
-Include the script in your project:
+### CDN (recommended)
+
+Simply include WispNavigate.js via [jsDelivr](https://www.jsdelivr.com/):
+
+```html
+<script src="https://cdn.jsdelivr.net/gh/gmargetic/wispnavigate.js/wisp-navigate.min.js"></script>
+
+### Include the script in your project:
 
 ```html
 <script src="WispNavigate.js"></script>
 ```
 
-Or import it via your bundler.
+~
+### NPM
+
+`npm install wisp-navigate`
+
+(NPM package is not yet available.)
+~
+
+### Or import it via your bundler.
 
 ---
 
@@ -73,18 +88,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
 You can listen to these events for custom behaviors:
 
-- `wisp:navigate-before`
-- `wisp:navigate-start`
-- `wisp:navigate-before-dom-update`
-- `wisp:navigate-after-dom-update`
-- `wisp:navigate-success`
-- `wisp:navigate-error`
-- `wisp:navigate-complete`
+- `wisp:navigate-before` - Fired before navigation starts. Can be prevented using `event.preventDefault()`.
+- `wisp:navigate-start` - Fired once navigation starts (after confirmation that it should proceed).
+- `wisp:navigate-before-dom-update` - Fired before updating the DOM, providing access to the new document.
+- `wisp:navigate-after-dom-update` - Fired after the DOM is updated, but before pushState.
+- `wisp:navigate-success` - Fired after successful navigation.
+- `wisp:navigate-error` - Fired when navigation fails.
+- `wisp:navigate-complete` - Always fired when navigation is complete, regardless of success or failure.
 
 Example:
 
 ```javascript
-document.addEventListener('wisp:navigate-success', (e) => {
+document.addEventListener('wisp:navigate-success', (event) => {
     console.log('Navigation successful to:', e.detail.url);
 });
 ```
