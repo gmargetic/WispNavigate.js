@@ -1,0 +1,20 @@
+{
+    "name": "wisp-navigate-js",
+    "version": "1.0.0",
+    "description": "WispNavigate.js is a super lightweight JavaScript class for simple AJAX-based, SPA-like navigation using <a> tags with wisp:navigate or wisp-navigate attributes.",
+    "main": "wisp-navigate.min.js",
+    "keywords": [
+        "navigation",
+        "ajax",
+        "spa",
+        "javascript",
+        "wisp",
+        "router"
+    ],
+    "author": "Goran Margetić",
+    "license": "GNU GENERAL PUBLIC LICENSE Version 3 LICENSE",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/gmargetic/WispNavigate.js.git"
+    }
+}
