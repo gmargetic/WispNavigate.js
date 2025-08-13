@@ -11,8 +11,17 @@
             navigationProgressBar: true,
             navigationProgressBarColor: '#29d',
             navigationProgressBarHeight: '3px',
-            enablePerformanceLogging: false
+            enablePerformanceLogging: false,
+            enablePrefetchOnHover: true,
+            enablePrefetchOnView: true,
+            prefetchDelay: 150
         };
+
+        static #abortController = null;
+        static #bound = false;
+        static #prefetchCache = new Map();
+        static #prefetchTimeout = null;
+        static #observer = null;
 
         static init(userConfig = {}) {
             this.config = { ...this.config, ...userConfig };
@@ -23,18 +32,73 @@
         }
 
         static bindNavigation() {
-            document.querySelectorAll('a[wisp\\:navigate], a[wisp-navigate]').forEach(link => {
-                link.removeEventListener('click', this.handleNavigate);
-                link.addEventListener('click', this.handleNavigate);
-            });
+            if (this.#bound) return;
+            this.#bound = true;
+
+            document.addEventListener('click', (e) => {
+                const link = e.target.closest('a[wisp\\:navigate], a[wisp-navigate]');
+                if (!link) return;
+
+                const href = link.getAttribute('href');
+                if (!this.#isNavigableLink(href, link)) return;
+
+                e.preventDefault();
+                this.handleNavigate(href);
+            }, { capture: false, passive: false });
+
+            if (this.config.enablePrefetchOnHover) {
+                document.addEventListener('mouseover', (e) => {
+                    const link = e.target.closest('a[wisp\\:navigate], a[wisp-navigate]');
+                    if (!link) return;
+
+                    const href = link.getAttribute('href');
+                    if (!this.#isNavigableLink(href, link)) return;
+
+                    clearTimeout(this.#prefetchTimeout);
+                    this.#prefetchTimeout = setTimeout(() => {
+                        this.prefetch(href);
+                    }, this.config.prefetchDelay);
+                }, { capture: false, passive: true });
+
+                document.addEventListener('mouseout', () => {
+                    clearTimeout(this.#prefetchTimeout);
+                }, { passive: true });
+            }
+
+            if (this.config.enablePrefetchOnView) {
+                if (this.#observer) {
+                    this.#observer.disconnect();
+                }
+                this.#observer = new IntersectionObserver((entries) => {
+                    for (const entry of entries) {
+                        if (entry.isIntersecting) {
+                            const link = entry.target;
+                            const href = link.getAttribute('href');
+                            if (this.#isNavigableLink(href, link)) {
+                                this.prefetch(href);
+                            }
+                            this.#observer.unobserve(link);
+                        }
+                    }
+                }, { rootMargin: '200px' });
+
+                document.querySelectorAll('a[wisp\\:navigate], a[wisp-navigate]').forEach(link => {
+                    const href = link.getAttribute('href');
+                    if (this.#isNavigableLink(href, link)) {
+                        this.#observer.observe(link);
+                    }
+                });
+            }
         }
 
-        static handleNavigate = (e) => {
-            e.preventDefault();
-            const url = e.currentTarget.getAttribute('href');
-            if (!url || url === '#') return;
-            this.navigate(url);
-        };
+        static handleNavigate(href) {
+            if (!href) return;
+            if (this.#prefetchCache.has(href)) {
+                this.#applyPrefetchedContent(href);
+            } else {
+                this.navigate(href);
+            }
+        }
 
         static async navigate(url, options = { pushState: true }) {
             const beforeNavigateEvent = new CustomEvent('wisp:navigate-before', {
@@ -42,8 +106,12 @@
                 detail: { url, options }
             });
 
-            const shouldProceed = document.dispatchEvent(beforeNavigateEvent);
-            if (!shouldProceed) return;
+            if (!document.dispatchEvent(beforeNavigateEvent)) return;
+
+            if (this.#abortController) {
+                this.#abortController.abort();
+            }
+            this.#abortController = new AbortController();
 
             try {
                 const startTime = performance.now();
@@ -58,53 +126,40 @@
                     headers: {
                         'X-Requested-With': 'X-Wisp-Navigate',
                         'Accept': 'text/html'
-                    }
+                    },
+                    signal: this.#abortController.signal
                 });
 
                 if (!response.ok) {
-                    throw new Error(`Navigation failed: ${response.status}`);
+                    throw new Error(`Navigation failed: ${response.status} ${response.statusText}`);
                 }
 
                 const html = await response.text();
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(html, 'text/html');
-
-                document.dispatchEvent(new CustomEvent('wisp:navigate-before-dom-update', {
-                    detail: { url, options, newDocument: doc }
-                }));
-
-                const newApp = doc.querySelector('#app');
-                const currentApp = document.querySelector('#app');
-
-                if (newApp && currentApp) {
-                    currentApp.innerHTML = newApp.innerHTML;
-                } else {
-                    document.body.innerHTML = doc.body.innerHTML;
-                }
-
-                document.title = doc.title;
-
-                document.dispatchEvent(new CustomEvent('wisp:navigate-after-dom-update', {
-                    detail: { url, options }
-                }));
+                this.#updateDOMFromHTML(html, url, options);
 
                 if (this.config.enablePerformanceLogging) {
                     const duration = performance.now() - startTime;
-                    console.debug(`WispNavigate took ${duration.toFixed(2)}ms`);
+                    console.debug(`[WispNavigate] Navigation took ${duration.toFixed(2)}ms`);
                 }
 
-                this.bindNavigation();
-
-                window.scrollTo(0, 0);
                 if (options.pushState !== false) {
-                    window.history.pushState({}, '', url);
+                    try {
+                        window.history.pushState({}, '', url);
+                    } catch (pushErr) {
+                        console.warn('[WispNavigate] pushState failed:', pushErr);
+                    }
                 }
 
                 document.dispatchEvent(new CustomEvent('wisp:navigate-success', {
                     detail: { url, options }
                 }));
             } catch (err) {
-                console.error('Navigation error:', err);
+                if (err.name === 'AbortError') {
+                    console.info('[WispNavigate] Navigation aborted');
+                    return;
+                }
+
+                console.error('[WispNavigate] Navigation error:', err, err.stack);
 
                 document.dispatchEvent(new CustomEvent('wisp:navigate-error', {
                     detail: { url, options, error: err }
@@ -118,6 +173,76 @@
                     detail: { url, options }
                 }));
             }
+        }
+
+        static async prefetch(url) {
+            if (this.#prefetchCache.has(url)) return;
+            try {
+                const response = await fetch(url, {
+                    headers: {
+                        'X-Requested-With': 'X-Wisp-Navigate',
+                        'Accept': 'text/html'
+                    }
+                });
+                if (!response.ok) return;
+                const html = await response.text();
+                this.#prefetchCache.set(url, html);
+            } catch (err) {
+                console.debug('[WispNavigate] Prefetch failed for', url, err);
+            }
+        }
+
+        static #applyPrefetchedContent(url) {
+            const html = this.#prefetchCache.get(url);
+            if (!html) return;
+            this.#updateDOMFromHTML(html, url, { pushState: true });
+
+            try {
+                window.history.pushState({}, '', url);
+            } catch (pushErr) {
+                console.warn('[WispNavigate] pushState failed:', pushErr);
+            }
+
+            document.dispatchEvent(new CustomEvent('wisp:navigate-success', {
+                detail: { url, options: { pushState: true }, prefetched: true }
+            }));
+        }
+
+        static #updateDOMFromHTML(html, url, options) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+
+            document.dispatchEvent(new CustomEvent('wisp:navigate-before-dom-update', {
+                detail: { url, options, newDocument: doc }
+            }));
+
+            const newApp = doc.querySelector('#app');
+            const currentApp = document.querySelector('#app');
+
+            if (newApp && currentApp) {
+                currentApp.innerHTML = newApp.innerHTML;
+            } else {
+                document.body.innerHTML = doc.body.innerHTML;
+            }
+
+            document.title = doc.title;
+
+            document.dispatchEvent(new CustomEvent('wisp:navigate-after-dom-update', {
+                detail: { url, options }
+            }));
+
+            this.#bound = false;
+            this.bindNavigation();
+            window.scrollTo(0, 0);
+        }
+
+        static #isNavigableLink(href, link) {
+            return !!href &&
+                href !== '#' &&
+                link.target !== '_blank' &&
+                !href.startsWith('mailto:') &&
+                !href.startsWith('tel:') &&
+                (!/^(https?:)?\/\//.test(href) || href.startsWith(location.origin));
         }
 
         static showNavigationProgressBar() {
@@ -143,6 +268,10 @@
 
         static injectNavigationProgressBar() {
             if (document.getElementById('wisp-progress-bar')) return;
+            if (!document.body) {
+                console.warn('[WispNavigate] Cannot inject progress bar - document.body not ready');
+                return;
+            }
             const bar = document.createElement('div');
             bar.id = 'wisp-progress-bar';
             const color = this.config.navigationProgressBarColor || '#29d';
@@ -155,15 +284,6 @@
             document.body.appendChild(bar);
         }
     }
-
-    document.addEventListener('DOMContentLoaded', () => 
-        WispNavigate.init({
-            navigationProgressBar: true,
-            navigationProgressBarColor: '#29d',
-            navigationProgressBarHeight: '3px',
-            enablePerformanceLogging: true
-        })
-    );
 
     return WispNavigate;
 });
